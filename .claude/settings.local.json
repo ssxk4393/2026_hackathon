@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.notion.so)",
+      "Bash(tasklist | grep -i electron 2>&1)",
+      "Bash(tasklist | grep -i node 2>&1)"
+    ]
+  }
+}

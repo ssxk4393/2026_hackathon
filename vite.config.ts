@@ -1,0 +1,66 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import electron from 'vite-plugin-electron';
+import electronRenderer from 'vite-plugin-electron-renderer';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [
+    react(),
+    electron([
+      {
+        entry: 'src/main/index.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/main',
+            lib: {
+              entry: 'src/main/index.ts',
+              formats: ['cjs'],
+            },
+            rollupOptions: {
+              external: ['electron', 'path', 'fs'],
+              output: {
+                entryFileNames: '[name].js',
+              },
+            },
+          },
+        },
+      },
+      {
+        entry: 'src/main/preload.ts',
+        vite: {
+          build: {
+            outDir: 'dist-electron/preload',
+            lib: {
+              entry: 'src/main/preload.ts',
+              formats: ['cjs'],
+            },
+            rollupOptions: {
+              external: ['electron'],
+              output: {
+                entryFileNames: '[name].js',
+              },
+            },
+          },
+        },
+        onstart(args) {
+          args.reload();
+        },
+      },
+    ]),
+    electronRenderer(),
+  ],
+  resolve: {
+    alias: {
+      '@shared': path.resolve(__dirname, 'src/shared'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        caption: path.resolve(__dirname, 'caption.html'),
+      },
+    },
+  },
+});
