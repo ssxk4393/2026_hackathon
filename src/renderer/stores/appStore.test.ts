@@ -2,29 +2,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from './appStore';
 import { DEFAULT_CAPTION_STYLE } from '../../shared/types';
 
-// Mock window.electronAPI
-const mockElectronAPI = {
-  updateCaption: vi.fn(),
-  switchOperator: vi.fn(),
-  updateStyle: vi.fn(),
-  openCaptionWindow: vi.fn(),
-  closeCaptionWindow: vi.fn(),
-  loadSettings: vi.fn(),
-  saveSettings: vi.fn(),
-  onCaptionWindowClosed: vi.fn(),
-  onAuthCallback: vi.fn(),
-};
-
 // Mock the socketService
 vi.mock('../services/socketService', () => ({
   sendCaption: vi.fn(),
 }));
 
-// Set up the global window.electronAPI
-vi.stubGlobal('window', {
-  ...globalThis.window,
-  electronAPI: mockElectronAPI,
-});
+// Use the electronAPI mock from test-setup.ts
+const mockElectronAPI = window.electronAPI as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
 describe('appStore', () => {
   beforeEach(() => {
