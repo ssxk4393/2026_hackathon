@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import type { Stenographer, CaptionStyle } from '../../shared/types';
+import type { Stenographer, CaptionStyle, SessionInfo } from '../../shared/types';
 import { DEFAULT_CAPTION_STYLE, DEFAULT_STENOGRAPHERS } from '../../shared/types';
+
+const API_BASE = 'http://localhost:3000';
 
 interface AppState {
   stenographers: Stenographer[];
@@ -8,11 +10,18 @@ interface AppState {
   captionStyle: CaptionStyle;
   captionTexts: Record<string, string>;
 
+  // 세션 상태
+  currentSession: SessionInfo | null;
+  authToken: string | null;
+
   setActiveOperator: (id: string) => void;
   updateCaptionText: (stenographerId: string, text: string) => void;
   updateStyle: (style: Partial<CaptionStyle>) => void;
   setStenographers: (stenographers: Stenographer[]) => void;
   setCaptionStyle: (style: CaptionStyle) => void;
+  setCurrentSession: (session: SessionInfo | null) => void;
+  setAuthToken: (token: string | null) => void;
+  saveCaptionLog: (text: string) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -20,6 +29,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeOperatorId: 'A',
   captionStyle: DEFAULT_CAPTION_STYLE,
   captionTexts: {},
+  currentSession: null,
+  authToken: null,
 
   setActiveOperator: (id: string) => {
     set((state) => ({
@@ -39,6 +50,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 현재 송출 담당자인 경우에만 자막 전송
     if (get().activeOperatorId === stenographerId) {
       window.electronAPI.updateCaption(text);
+      // 세션이 있으면 서버에 자막 로그 저장
+      get().saveCaptionLog(text);
     }
   },
 
@@ -52,4 +65,22 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setStenographers: (stenographers) => set({ stenographers }),
   setCaptionStyle: (style) => set({ captionStyle: style }),
+  setCurrentSession: (session) => set({ currentSession: session }),
+  setAuthToken: (token) => set({ authToken: token }),
+
+  saveCaptionLog: (text: string) => {
+    const { currentSession, authToken } = get();
+    if (!currentSession || !authToken) return;
+
+    fetch(`${API_BASE}/sessions/${currentSession.id}/captions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ text }),
+    }).catch(() => {
+      // 자막 로그 저장 실패는 무시 (송출에 영향 주지 않음)
+    });
+  },
 }));

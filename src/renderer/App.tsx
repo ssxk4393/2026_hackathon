@@ -5,6 +5,10 @@ import { ControlBar } from './components/ControlBar';
 import { StyleSettingsPanel } from './components/StyleSettingsPanel';
 import { StatusBar } from './components/StatusBar';
 import { LoginPage } from './components/LoginPage';
+import { SessionLobby } from './components/SessionLobby';
+import type { SessionInfo } from '../shared/types';
+
+const API_BASE = 'http://localhost:3000';
 
 interface AuthUser {
   token: string;
@@ -17,6 +21,9 @@ export function App() {
   const setActiveOperator = useAppStore((s) => s.setActiveOperator);
   const setCaptionStyle = useAppStore((s) => s.setCaptionStyle);
   const setStenographers = useAppStore((s) => s.setStenographers);
+  const setCurrentSession = useAppStore((s) => s.setCurrentSession);
+  const setAuthToken = useAppStore((s) => s.setAuthToken);
+  const currentSession = useAppStore((s) => s.currentSession);
   const [isStylePanelOpen, setIsStylePanelOpen] = useState(false);
   const [stylePanelWidth, setStylePanelWidth] = useState(320);
   const isResizing = useRef(false);
@@ -30,11 +37,13 @@ export function App() {
     const saved = localStorage.getItem('auth_user');
     if (saved) {
       try {
-        setUser(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setUser(parsed);
+        setAuthToken(parsed.token);
       } catch { /* ignore */ }
     }
     setIsAuthLoading(false);
-  }, []);
+  }, [setAuthToken]);
 
   // 딥링크를 통한 인증 콜백 수신
   useEffect(() => {
@@ -45,20 +54,92 @@ export function App() {
         avatar: data.avatar,
       };
       setUser(authUser);
+      setAuthToken(data.token);
       localStorage.setItem('auth_user', JSON.stringify(authUser));
     });
     return cleanup;
-  }, []);
+  }, [setAuthToken]);
 
   const handleLogin = (token: string, name: string, avatar: string) => {
     const authUser: AuthUser = { token, name, avatar };
     setUser(authUser);
+    setAuthToken(token);
     localStorage.setItem('auth_user', JSON.stringify(authUser));
   };
 
   const handleLogout = () => {
     setUser(null);
+    setAuthToken(null);
+    setCurrentSession(null);
     localStorage.removeItem('auth_user');
+  };
+
+  const handleJoinSession = (session: SessionInfo) => {
+    setCurrentSession(session);
+  };
+
+  const handleLeaveSession = async () => {
+    if (!currentSession || !user) {
+      setCurrentSession(null);
+      return;
+    }
+
+    try {
+      await fetch(`${API_BASE}/sessions/${currentSession.id}/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+    } catch {
+      // 나가기 실패해도 UI는 로비로 복귀
+    }
+
+    setCurrentSession(null);
+  };
+
+  const handleEndSession = async () => {
+    if (!currentSession || !user) return;
+
+    try {
+      await fetch(`${API_BASE}/sessions/${currentSession.id}/end`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+      });
+    } catch {
+      // 종료 실패
+    }
+
+    setCurrentSession(null);
+  };
+
+  const handleExportSession = async (format: 'txt' | 'json') => {
+    if (!currentSession || !user) return;
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/sessions/${currentSession.id}/export?format=${format}`,
+        {
+          headers: { Authorization: `Bearer ${user.token}` },
+        }
+      );
+
+      if (!res.ok) return;
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `session-${currentSession.id}.${format}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // 내보내기 실패
+    }
   };
 
   // 설정 로드
@@ -132,6 +213,22 @@ export function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
+  // 인증 + 세션 없음 → 세션 로비
+  if (!currentSession) {
+    return (
+      <SessionLobby
+        token={user.token}
+        userName={user.name}
+        userAvatar={user.avatar}
+        onJoinSession={handleJoinSession}
+        onLogout={handleLogout}
+      />
+    );
+  }
+
+  // 인증 + 세션 있음 → 작업 화면
+  const isCreator = currentSession.createdBy === getCurrentUserId(user.token);
+
   return (
     <div className="flex h-screen flex-col bg-surface-0">
       {/* 타이틀바 */}
@@ -141,10 +238,31 @@ export function App() {
         </div>
         <div>
           <h1 className="text-sm font-semibold text-text-primary">Realtime Caption Studio</h1>
-          <p className="text-xs text-text-muted">실시간 자막 송출</p>
+          <p className="text-xs text-text-muted">{currentSession.name}</p>
         </div>
-        {/* 유저 정보 & 로그아웃 */}
+        {/* 세션 정보 + 유저 정보 */}
         <div className="ml-auto flex items-center gap-3">
+          {/* 멤버 표시 */}
+          <div className="flex items-center gap-1">
+            {currentSession.members
+              .filter((m) => !m.leftAt)
+              .map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
+                    m.role === 'operator'
+                      ? 'bg-active-operator/20 text-active-operator'
+                      : 'bg-surface-3 text-text-muted'
+                  }`}
+                  title={`${m.user.name} (${m.role})`}
+                >
+                  {m.user.name[0]}
+                </div>
+              ))}
+          </div>
+
+          <div className="h-4 w-px bg-border-subtle" />
+
           <div className="flex items-center gap-2">
             {user.avatar ? (
               <img src={user.avatar} alt="" className="h-6 w-6 rounded-full" />
@@ -155,19 +273,48 @@ export function App() {
             )}
             <span className="text-sm text-text-primary">{user.name}</span>
           </div>
-          <button
-            onClick={handleLogout}
-            className="rounded-lg px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
-          >
-            로그아웃
-          </button>
+
+          {/* 내보내기 */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleExportSession('txt')}
+              className="rounded-lg px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+              title="TXT로 내보내기"
+            >
+              TXT
+            </button>
+            <button
+              onClick={() => handleExportSession('json')}
+              className="rounded-lg px-2 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+              title="JSON으로 내보내기"
+            >
+              JSON
+            </button>
+          </div>
+
+          {/* 세션 나가기 / 종료 */}
+          {isCreator ? (
+            <button
+              onClick={handleEndSession}
+              className="rounded-lg bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-400 transition-colors hover:bg-red-500/20"
+            >
+              세션 종료
+            </button>
+          ) : (
+            <button
+              onClick={handleLeaveSession}
+              className="rounded-lg px-2.5 py-1 text-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+            >
+              나가기
+            </button>
+          )}
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* 메인 영역 */}
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* 속기사 패널들 — flex-1로 남은 공간 모두 차지 + 내부 패널도 균등 분배 */}
+          {/* 속기사 패널들 */}
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-5">
             {stenographers.map((s) => (
               <StenographerPanel key={s.id} stenographer={s} />
@@ -200,4 +347,14 @@ export function App() {
       <StatusBar />
     </div>
   );
+}
+
+/** JWT에서 userId 추출 (base64 디코딩) */
+function getCurrentUserId(token: string): string {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.userId || '';
+  } catch {
+    return '';
+  }
 }

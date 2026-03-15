@@ -116,6 +116,139 @@ sessionRouter.post('/:id/end', async (req: AuthRequest, res: Response) => {
   res.json(updated);
 });
 
+// 세션 나가기
+sessionRouter.post('/:id/leave', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const member = await prisma.sessionMember.findUnique({
+    where: { sessionId_userId: { sessionId: id, userId: req.user!.userId } },
+  });
+
+  if (!member) {
+    res.status(404).json({ error: '세션 멤버가 아닙니다' });
+    return;
+  }
+
+  if (member.leftAt) {
+    res.json({ message: '이미 나간 세션입니다' });
+    return;
+  }
+
+  const updated = await prisma.sessionMember.update({
+    where: { id: member.id },
+    data: { leftAt: new Date() },
+  });
+
+  res.json(updated);
+});
+
+// 자막 로그 저장
+sessionRouter.post('/:id/captions', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const { text } = req.body;
+
+  if (!text || !text.trim()) {
+    res.status(400).json({ error: '자막 텍스트를 입력해주세요' });
+    return;
+  }
+
+  const session = await prisma.session.findUnique({ where: { id } });
+  if (!session || session.status !== 'active') {
+    res.status(404).json({ error: '활성 세션을 찾을 수 없습니다' });
+    return;
+  }
+
+  const log = await prisma.captionLog.create({
+    data: {
+      sessionId: id,
+      userId: req.user!.userId,
+      text: text.trim(),
+    },
+  });
+
+  res.status(201).json(log);
+});
+
+// 자막 이력 조회
+sessionRouter.get('/:id/captions', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+
+  const captions = await prisma.captionLog.findMany({
+    where: { sessionId: id },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  res.json(captions);
+});
+
+// 세션 내보내기
+sessionRouter.get('/:id/export', async (req: AuthRequest, res: Response) => {
+  const { id } = req.params;
+  const format = (req.query.format as string) || 'json';
+
+  const session = await prisma.session.findUnique({
+    where: { id },
+    include: {
+      creator: { select: { id: true, name: true } },
+      members: {
+        include: { user: { select: { id: true, name: true } } },
+      },
+      captions: {
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  });
+
+  if (!session) {
+    res.status(404).json({ error: '세션을 찾을 수 없습니다' });
+    return;
+  }
+
+  if (format === 'txt') {
+    const lines: string[] = [
+      `세션: ${session.name}`,
+      `생성자: ${session.creator.name}`,
+      `시작: ${session.createdAt.toISOString()}`,
+      session.endedAt ? `종료: ${session.endedAt.toISOString()}` : '상태: 진행 중',
+      `참가자: ${session.members.map((m) => m.user.name).join(', ')}`,
+      '',
+      '--- 자막 로그 ---',
+      '',
+      ...session.captions.map(
+        (c) => `[${c.createdAt.toISOString()}] ${c.text}`
+      ),
+    ];
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="session-${id}.txt"`);
+    res.send(lines.join('\n'));
+    return;
+  }
+
+  // JSON format
+  res.json({
+    session: {
+      id: session.id,
+      name: session.name,
+      status: session.status,
+      createdAt: session.createdAt,
+      endedAt: session.endedAt,
+      creator: session.creator,
+      members: session.members.map((m) => ({
+        name: m.user.name,
+        role: m.role,
+        joinedAt: m.joinedAt,
+        leftAt: m.leftAt,
+      })),
+    },
+    captions: session.captions.map((c) => ({
+      text: c.text,
+      createdAt: c.createdAt,
+    })),
+    exportedAt: new Date().toISOString(),
+  });
+});
+
 // 세션 상세 조회
 sessionRouter.get('/:id', async (req: AuthRequest, res: Response) => {
   const { id } = req.params;

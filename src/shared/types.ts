@@ -136,6 +136,43 @@ export const DEFAULT_SETTINGS: UserSettings = {
   lastOperatorId: 'A',
 };
 
+// Session 관련 타입
+export interface SessionUser {
+  id: string;
+  name: string;
+  avatar: string | null;
+}
+
+export interface SessionMemberInfo {
+  id: string;
+  sessionId: string;
+  userId: string;
+  role: 'operator' | 'standby';
+  joinedAt: string;
+  leftAt: string | null;
+  user: SessionUser;
+}
+
+export interface SessionInfo {
+  id: string;
+  name: string;
+  status: 'active' | 'ended';
+  maxOperators: number;
+  createdBy: string;
+  creator: SessionUser;
+  createdAt: string;
+  endedAt: string | null;
+  members: SessionMemberInfo[];
+}
+
+export interface CaptionLogEntry {
+  id: string;
+  sessionId: string;
+  userId: string;
+  text: string;
+  createdAt: string;
+}
+
 // IPC 채널 상수
 export const IPC_CHANNELS = {
   CAPTION_UPDATE: 'caption:update',
