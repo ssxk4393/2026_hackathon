@@ -53,7 +53,7 @@ export function ControlBar({ onToggleStyle, isStyleOpen, isSessionMode = false }
 
   return (
     <div className="border-t border-border-subtle bg-surface-1 px-5 py-3">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4 gap-y-2">
         {/* 세션 모드: 현재 operator + 교대 UI / 로컬 모드: 송출 전환 */}
         {isSessionMode ? (
           <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ export function ControlBar({ onToggleStyle, isStyleOpen, isSessionMode = false }
         <div className="h-6 w-px bg-border-subtle" />
 
         {/* 액션 버튼들 */}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex min-w-0 flex-shrink-0 gap-2">
           <button
             onClick={onToggleStyle}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 ${

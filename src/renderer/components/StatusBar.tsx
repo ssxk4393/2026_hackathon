@@ -46,11 +46,11 @@ export function StatusBar() {
   const status = statusConfig[connectionStatus] || statusConfig.disconnected;
 
   return (
-    <div className="flex items-center gap-4 border-t border-border-subtle bg-surface-1 px-5 py-1.5">
+    <div className="flex flex-wrap items-center gap-4 border-t border-border-subtle bg-surface-1 px-5 py-1.5">
       {/* 송출 상태 */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <span className="h-1.5 w-1.5 rounded-full bg-active-operator" />
-        <span className="text-[11px] text-text-muted">
+        <span className="min-w-0 text-[11px] text-text-muted">
           송출: <span className="font-semibold text-active-operator">{activeStenographer?.name ?? activeOperatorId}</span>
         </span>
       </div>

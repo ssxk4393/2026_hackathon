@@ -136,8 +136,14 @@ export function SessionLobby({
           </div>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400">
-              {error}
+            <div className="mb-4 rounded-lg bg-red-500/10 px-4 py-2.5 text-sm text-red-400">
+              <p>{error}</p>
+              <button
+                onClick={fetchSessions}
+                className="mt-1 text-xs text-red-300 underline hover:text-red-200"
+              >
+                다시 시도
+              </button>
             </div>
           )}
 
