@@ -196,6 +196,7 @@ export interface ServerToClientEvents {
   'member:left': (data: { userId: string }) => void;
   'members:list': (data: OnlineMember[]) => void;
   'session:ended': (data: { sessionId: string }) => void;
+  'error': (data: { message: string }) => void;
 }
 
 export interface OnlineMember {

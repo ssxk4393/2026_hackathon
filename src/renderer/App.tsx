@@ -15,9 +15,8 @@ import {
   leaveSession as socketLeaveSession,
   disconnectSocket,
 } from './services/socketService';
+import { apiRequest, setUnauthorizedHandler } from './services/apiClient';
 import type { SessionInfo } from '../shared/types';
-
-const API_BASE = 'http://localhost:3000';
 
 interface AuthUser {
   token: string;
@@ -98,6 +97,11 @@ export function App() {
     localStorage.removeItem('auth_user');
   };
 
+  // 401 자동 로그아웃 핸들러 등록
+  useEffect(() => {
+    setUnauthorizedHandler(handleLogout);
+  }, []);
+
   const handleJoinSession = (session: SessionInfo) => {
     setCurrentSession(session);
   };
@@ -148,12 +152,9 @@ export function App() {
     }
 
     try {
-      await fetch(`${API_BASE}/sessions/${currentSession.id}/leave`, {
+      await apiRequest(`/sessions/${currentSession.id}/leave`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        token: user.token,
       });
     } catch {
       // 나가기 실패해도 UI는 로비로 복귀
@@ -166,12 +167,9 @@ export function App() {
     if (!currentSession || !user) return;
 
     try {
-      await fetch(`${API_BASE}/sessions/${currentSession.id}/end`, {
+      await apiRequest(`/sessions/${currentSession.id}/end`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        token: user.token,
       });
     } catch {
       // 종료 실패
@@ -185,11 +183,16 @@ export function App() {
 
     try {
       const res = await fetch(
-        `${API_BASE}/sessions/${currentSession.id}/export?format=${format}`,
+        `http://localhost:3000/sessions/${currentSession.id}/export?format=${format}`,
         {
           headers: { Authorization: `Bearer ${user.token}` },
         }
       );
+
+      if (res.status === 401) {
+        handleLogout();
+        return;
+      }
 
       if (!res.ok) return;
 

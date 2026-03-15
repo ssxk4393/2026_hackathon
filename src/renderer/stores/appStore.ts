@@ -5,6 +5,9 @@ import { sendCaption as socketSendCaption } from '../services/socketService';
 
 const API_BASE = 'http://localhost:3000';
 
+// WebSocket 전송 디바운스 타이머 (50ms)
+let socketDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 interface AppState {
   stenographers: Stenographer[];
   activeOperatorId: string;
@@ -52,9 +55,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const session = get().currentSession;
 
     if (session) {
-      // 세션 모드: 항상 로컬 CaptionWindow + WebSocket으로 전송 (서버가 operator 검증)
+      // 세션 모드: 로컬 CaptionWindow는 즉시 전송, WebSocket은 50ms 디바운스
       window.electronAPI.updateCaption(text);
-      socketSendCaption(session.id, text);
+      if (socketDebounceTimer) clearTimeout(socketDebounceTimer);
+      socketDebounceTimer = setTimeout(() => {
+        socketSendCaption(session.id, text);
+      }, 50);
     } else if (get().activeOperatorId === stenographerId) {
       // 로컬 모드: 현재 송출 담당자인 경우에만 전송
       window.electronAPI.updateCaption(text);

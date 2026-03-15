@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAppStore } from '../stores/appStore';
 import { useSocketStore } from '../stores/socketStore';
 import { switchOperator, requestOperator } from '../services/socketService';
@@ -39,14 +39,16 @@ export function ControlBar({ onToggleStyle, isStyleOpen, isSessionMode = false }
   const currentOperator = onlineMembers.find((m) => m.role === 'operator');
   const standbyMembers = onlineMembers.filter((m) => m.role === 'standby');
 
-  // 내 역할 계산
-  let myUserId = '';
-  if (authToken) {
+  // 내 역할 계산 (authToken이 변경될 때만 재계산)
+  const myUserId = useMemo(() => {
+    if (!authToken) return '';
     try {
       const payload = JSON.parse(atob(authToken.split('.')[1]));
-      myUserId = payload.userId || '';
-    } catch { /* ignore */ }
-  }
+      return payload.userId || '';
+    } catch {
+      return '';
+    }
+  }, [authToken]);
   const myRole = onlineMembers.find((m) => m.userId === myUserId)?.role || 'operator';
 
   return (
