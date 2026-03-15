@@ -1,14 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { useAppStore } from './stores/appStore';
 import { useSocketStore } from './stores/socketStore';
 import { StenographerPanel } from './components/StenographerPanel';
 import { StandbyPanel } from './components/StandbyPanel';
 import { RemoteOperatorPanel } from './components/RemoteOperatorPanel';
 import { ControlBar } from './components/ControlBar';
-import { StyleSettingsPanel } from './components/StyleSettingsPanel';
 import { StatusBar } from './components/StatusBar';
-import { LoginPage } from './components/LoginPage';
-import { SessionLobby } from './components/SessionLobby';
+
+const StyleSettingsPanel = lazy(() => import('./components/StyleSettingsPanel').then(m => ({ default: m.StyleSettingsPanel })));
+const SessionLobby = lazy(() => import('./components/SessionLobby').then(m => ({ default: m.SessionLobby })));
+const LoginPage = lazy(() => import('./components/LoginPage').then(m => ({ default: m.LoginPage })));
 import {
   connectSocket,
   joinSession,
@@ -277,19 +278,25 @@ export function App() {
 
   // 미인증 → 로그인 페이지
   if (!user) {
-    return <LoginPage onLogin={handleLogin} />;
+    return (
+      <Suspense fallback={<div className="flex h-screen items-center justify-center bg-surface-0"><div className="text-text-muted">로딩 중...</div></div>}>
+        <LoginPage onLogin={handleLogin} />
+      </Suspense>
+    );
   }
 
   // 인증 + 세션 없음 → 세션 로비
   if (!currentSession) {
     return (
-      <SessionLobby
-        token={user.token}
-        userName={user.name}
-        userAvatar={user.avatar}
-        onJoinSession={handleJoinSession}
-        onLogout={handleLogout}
-      />
+      <Suspense fallback={<div className="flex h-screen items-center justify-center bg-surface-0"><div className="text-text-muted">로딩 중...</div></div>}>
+        <SessionLobby
+          token={user.token}
+          userName={user.name}
+          userAvatar={user.avatar}
+          onJoinSession={handleJoinSession}
+          onLogout={handleLogout}
+        />
+      </Suspense>
     );
   }
 
@@ -299,18 +306,18 @@ export function App() {
   return (
     <div className="flex h-screen flex-col bg-surface-0">
       {/* 타이틀바 */}
-      <header className="flex shrink-0 items-center gap-3 border-b border-border-subtle bg-surface-1 px-5 py-3">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border-subtle bg-surface-1 px-5 py-3">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/20">
           <span className="text-sm font-bold text-accent">RC</span>
         </div>
-        <div>
+        <div className="min-w-0">
           <h1 className="text-sm font-semibold text-text-primary">Realtime Caption Studio</h1>
-          <p className="text-xs text-text-muted">{currentSession.name}</p>
+          <p className="truncate text-xs text-text-muted">{currentSession.name}</p>
         </div>
         {/* 세션 정보 + 유저 정보 */}
         <div className="ml-auto flex items-center gap-3">
           {/* 온라인 멤버 표시 */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 overflow-hidden">
             {onlineMembers.map((m) => (
               <div
                 key={m.userId}
@@ -437,7 +444,9 @@ export function App() {
             >
               <div className="h-8 w-0.5 rounded-full bg-border-subtle transition-colors group-hover:bg-accent" />
             </div>
-            <StyleSettingsPanel onClose={() => setIsStylePanelOpen(false)} width={stylePanelWidth} />
+            <Suspense fallback={null}>
+              <StyleSettingsPanel onClose={() => setIsStylePanelOpen(false)} width={stylePanelWidth} />
+            </Suspense>
           </div>
         )}
       </div>

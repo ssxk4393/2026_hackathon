@@ -6,6 +6,8 @@ import { authRouter } from './routes/auth';
 import { userRouter } from './routes/user';
 import { sessionRouter } from './routes/session';
 import { initSocketServer } from './socket';
+import { requestLogger } from './middleware/logger';
+import { AppError } from './utils/errors';
 
 dotenv.config();
 
@@ -19,6 +21,7 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+app.use(requestLogger);
 
 // 라우트
 app.use('/auth', authRouter);
@@ -32,8 +35,13 @@ app.get('/health', (_req, res) => {
 
 // Global error handler (after all routes)
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Server] Unhandled error:', err.message);
-  res.status(500).json({ error: '서버 내부 오류가 발생했습니다' });
+  if (err instanceof AppError) {
+    console.error(`[Server] ${err.code}: ${err.message}`);
+    res.status(err.statusCode).json({ error: err.message, code: err.code });
+  } else {
+    console.error('[Server] Unhandled error:', err.message);
+    res.status(500).json({ error: '서버 내부 오류가 발생했습니다' });
+  }
 });
 
 // Socket.io 초기화
