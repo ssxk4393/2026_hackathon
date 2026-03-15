@@ -1,7 +1,7 @@
 # Sprint 3: 서버 기반 + 인증 시스템
 
 **기간**: 2026-03-15 ~ (진행 중)
-**상태**: IN PROGRESS
+**상태**: COMPLETED
 
 ---
 
@@ -85,7 +85,7 @@ model CaptionLog {
 ## 알려진 이슈
 
 - [ ] 카카오 OAuth: 서버에서 kauth.kakao.com 호출 시 `unable to verify the first certificate` SSL 에러 (`--use-system-ca` 옵션으로도 해결 안 됨)
-- [ ] server/src/routes/session.ts에 TypeScript 타입 에러 존재 (Sprint 4에서 수정 예정)
+- [x] Sprint 8에서 수정 완료
 
 ## 완료 기준 체크
 

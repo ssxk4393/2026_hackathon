@@ -4,7 +4,7 @@
 - **서비스명**: Realtime Caption Studio
 - **목적**: 속기사 실시간 자막 송출 프로그램 (2명 이상 협업, 듀얼 모니터 자막 출력)
 - **개발 방식**: 바이브 코딩 (AI 네이티브 해커톤)
-- **현재 Sprint**: Sprint 3 (서버 + 인증) — `docs/sprint/sprint3.md` 참조
+- **현재 Sprint**: Sprint 8 완료 (안정화 + 릴리스) — `docs/sprint/sprint8.md` 참조
 
 ## 기술 스택
 - **Runtime**: Electron v33+ (데스크탑 앱)
@@ -102,3 +102,6 @@ NODE_OPTIONS="--use-system-ca" npm run dev
 - 카카오 개발자 콘솔: Redirect URI는 REST API 키 설정 내에서 등록 (2026년 기준 UI 변경됨)
 - 커스텀 폰트 업로드: Sprint 1 고도화 시 추가 예정
 - 네이버 OAuth: 추후 추가 예정
+- WebSocket 기반 실시간 통신: Sprint 5에서 구현 완료
+- 세션 협업 + 교대 시스템: Sprint 6에서 구현 완료
+- 테스트 51개 + 에러 핸들링: Sprint 8에서 구현 완료
