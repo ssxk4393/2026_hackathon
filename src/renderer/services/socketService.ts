@@ -12,10 +12,10 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 're
 interface SocketCallbacks {
   onStatusChange: (status: ConnectionStatus) => void;
   onCaptionBroadcast: (data: { text: string; userId: string; userName: string; timestamp: number }) => void;
-  onOperatorSwitched: (data: { operatorUserId: string; userName: string }) => void;
-  onMemberJoined: (data: { userId: string; name: string; role: string }) => void;
+  onOperatorSwitched: (data: { newOperatorUserId: string; newOperatorName: string; oldOperatorUserId: string; oldOperatorName: string }) => void;
+  onMemberJoined: (data: { userId: string; name: string; role: 'operator' | 'standby' }) => void;
   onMemberLeft: (data: { userId: string }) => void;
-  onMembersList: (data: { userId: string; name: string; role: string }[]) => void;
+  onMembersList: (data: { userId: string; name: string; role: 'operator' | 'standby' }[]) => void;
   onSessionEnded: (data: { sessionId: string }) => void;
 }
 
@@ -75,6 +75,10 @@ export function sendCaption(sessionId: string, text: string): void {
 
 export function switchOperator(sessionId: string, operatorUserId: string): void {
   socket?.emit('operator:switch', { sessionId, operatorUserId });
+}
+
+export function requestOperator(sessionId: string): void {
+  socket?.emit('operator:request', { sessionId });
 }
 
 export function disconnectSocket(): void {

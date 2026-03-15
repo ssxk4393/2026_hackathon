@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from './stores/appStore';
 import { useSocketStore } from './stores/socketStore';
 import { StenographerPanel } from './components/StenographerPanel';
+import { StandbyPanel } from './components/StandbyPanel';
+import { RemoteOperatorPanel } from './components/RemoteOperatorPanel';
 import { ControlBar } from './components/ControlBar';
 import { StyleSettingsPanel } from './components/StyleSettingsPanel';
 import { StatusBar } from './components/StatusBar';
@@ -38,6 +40,21 @@ export function App() {
   // 인증 상태
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // Socket 상태
+  const setConnectionStatus = useSocketStore((s) => s.setConnectionStatus);
+  const setOnlineMembers = useSocketStore((s) => s.setOnlineMembers);
+  const addOnlineMember = useSocketStore((s) => s.addOnlineMember);
+  const removeOnlineMember = useSocketStore((s) => s.removeOnlineMember);
+  const setLastCaption = useSocketStore((s) => s.setLastCaption);
+  const updateMemberRole = useSocketStore((s) => s.updateMemberRole);
+  const resetSocket = useSocketStore((s) => s.reset);
+  const onlineMembers = useSocketStore((s) => s.onlineMembers);
+
+  // 현재 유저의 role 계산
+  const currentUserId = user ? getCurrentUserId(user.token) : '';
+  const myRole = onlineMembers.find((m) => m.userId === currentUserId)?.role || 'operator';
+  const isSessionMode = currentSession !== null;
 
   // 로컬스토리지에서 저장된 인증 정보 복원
   useEffect(() => {
@@ -81,14 +98,6 @@ export function App() {
     localStorage.removeItem('auth_user');
   };
 
-  // Socket 상태
-  const setConnectionStatus = useSocketStore((s) => s.setConnectionStatus);
-  const setOnlineMembers = useSocketStore((s) => s.setOnlineMembers);
-  const addOnlineMember = useSocketStore((s) => s.addOnlineMember);
-  const removeOnlineMember = useSocketStore((s) => s.removeOnlineMember);
-  const setLastCaption = useSocketStore((s) => s.setLastCaption);
-  const resetSocket = useSocketStore((s) => s.reset);
-
   const handleJoinSession = (session: SessionInfo) => {
     setCurrentSession(session);
   };
@@ -97,15 +106,16 @@ export function App() {
   useEffect(() => {
     if (!currentSession || !user) return;
 
-    const socket = connectSocket(user.token, {
+    connectSocket(user.token, {
       onStatusChange: setConnectionStatus,
       onCaptionBroadcast: (data) => {
         setLastCaption(data);
         // 원격 자막을 로컬 CaptionWindow에도 표시
         window.electronAPI.updateCaption(data.text);
       },
-      onOperatorSwitched: (_data) => {
-        // TODO: 원격 송출 전환 반영
+      onOperatorSwitched: (data) => {
+        updateMemberRole(data.newOperatorUserId, 'operator');
+        updateMemberRole(data.oldOperatorUserId, 'standby');
       },
       onMemberJoined: (data) => {
         addOnlineMember(data);
@@ -137,7 +147,6 @@ export function App() {
       return;
     }
 
-    // Socket 퇴장은 useEffect cleanup에서 처리됨
     try {
       await fetch(`${API_BASE}/sessions/${currentSession.id}/leave`, {
         method: 'POST',
@@ -207,9 +216,10 @@ export function App() {
     });
   }, [setCaptionStyle, setStenographers, setActiveOperator]);
 
-  // 글로벌 단축키: F1~F4로 송출 전환
+  // 글로벌 단축키: F1~F4로 송출 전환 (로컬 모드에서만)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (isSessionMode) return; // 세션 모드에서는 비활성화
       const map: Record<string, string> = {
         F1: 'A',
         F2: 'B',
@@ -223,7 +233,7 @@ export function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [setActiveOperator]);
+  }, [setActiveOperator, isSessionMode]);
 
   // 패널 리사이즈 핸들러
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -281,7 +291,7 @@ export function App() {
   }
 
   // 인증 + 세션 있음 → 작업 화면
-  const isCreator = currentSession.createdBy === getCurrentUserId(user.token);
+  const isCreator = currentSession.createdBy === currentUserId;
 
   return (
     <div className="flex h-screen flex-col bg-surface-0">
@@ -296,23 +306,21 @@ export function App() {
         </div>
         {/* 세션 정보 + 유저 정보 */}
         <div className="ml-auto flex items-center gap-3">
-          {/* 멤버 표시 */}
+          {/* 온라인 멤버 표시 */}
           <div className="flex items-center gap-1">
-            {currentSession.members
-              .filter((m) => !m.leftAt)
-              .map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                    m.role === 'operator'
-                      ? 'bg-active-operator/20 text-active-operator'
-                      : 'bg-surface-3 text-text-muted'
-                  }`}
-                  title={`${m.user.name} (${m.role})`}
-                >
-                  {m.user.name[0]}
-                </div>
-              ))}
+            {onlineMembers.map((m) => (
+              <div
+                key={m.userId}
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
+                  m.role === 'operator'
+                    ? 'bg-active-operator/20 text-active-operator'
+                    : 'bg-surface-3 text-text-muted'
+                }`}
+                title={`${m.name} (${m.role})`}
+              >
+                {m.name[0]}
+              </div>
+            ))}
           </div>
 
           <div className="h-4 w-px bg-border-subtle" />
@@ -326,6 +334,14 @@ export function App() {
               </div>
             )}
             <span className="text-sm text-text-primary">{user.name}</span>
+            {/* 내 역할 뱃지 */}
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+              myRole === 'operator'
+                ? 'bg-active-operator/15 text-active-operator'
+                : 'bg-yellow-500/15 text-yellow-400'
+            }`}>
+              {myRole === 'operator' ? 'OPERATOR' : 'STANDBY'}
+            </span>
           </div>
 
           {/* 내보내기 */}
@@ -368,17 +384,43 @@ export function App() {
       <div className="flex min-h-0 flex-1">
         {/* 메인 영역 */}
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* 속기사 패널들 */}
+          {/* 세션 모드: role 기반 패널 / 로컬 모드: 기존 패널 */}
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-5">
-            {stenographers.map((s) => (
-              <StenographerPanel key={s.id} stenographer={s} />
-            ))}
+            {isSessionMode ? (
+              <>
+                {/* 내 패널: 항상 표시 (operator면 입력 가능, standby면 연습용) */}
+                <StenographerPanel
+                  key={currentUserId}
+                  stenographer={{
+                    id: currentUserId,
+                    name: user.name,
+                    isActive: myRole === 'operator',
+                  }}
+                />
+                {/* 다른 operator 패널: 읽기 전용 */}
+                {onlineMembers
+                  .filter((m) => m.role === 'operator' && m.userId !== currentUserId)
+                  .map((m) => (
+                    <RemoteOperatorPanel
+                      key={m.userId}
+                      userId={m.userId}
+                      name={m.name}
+                    />
+                  ))}
+              </>
+            ) : (
+              // 로컬 모드: 기존 패널
+              stenographers.map((s) => (
+                <StenographerPanel key={s.id} stenographer={s} />
+              ))
+            )}
           </div>
 
           {/* 컨트롤 바 */}
           <ControlBar
             onToggleStyle={() => setIsStylePanelOpen((v) => !v)}
             isStyleOpen={isStylePanelOpen}
+            isSessionMode={isSessionMode}
           />
         </div>
 

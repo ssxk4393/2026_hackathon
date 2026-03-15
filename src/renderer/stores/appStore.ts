@@ -48,19 +48,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       captionTexts: { ...state.captionTexts, [stenographerId]: text },
     }));
-    // 현재 송출 담당자인 경우에만 자막 전송
-    if (get().activeOperatorId === stenographerId) {
-      // 로컬 CaptionWindow에 즉시 표시
-      window.electronAPI.updateCaption(text);
 
-      // 세션이 있으면 WebSocket으로 브로드캐스트 (서버가 DB 저장도 처리)
-      const session = get().currentSession;
-      if (session) {
-        socketSendCaption(session.id, text);
-      } else {
-        // 세션 없으면 HTTP 폴백으로 로그 저장
-        get().saveCaptionLog(text);
-      }
+    const session = get().currentSession;
+
+    if (session) {
+      // 세션 모드: 항상 로컬 CaptionWindow + WebSocket으로 전송 (서버가 operator 검증)
+      window.electronAPI.updateCaption(text);
+      socketSendCaption(session.id, text);
+    } else if (get().activeOperatorId === stenographerId) {
+      // 로컬 모드: 현재 송출 담당자인 경우에만 전송
+      window.electronAPI.updateCaption(text);
+      get().saveCaptionLog(text);
     }
   },
 
