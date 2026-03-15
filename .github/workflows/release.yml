@@ -9,8 +9,43 @@ permissions:
   contents: write
 
 jobs:
+  # 릴리스 전 테스트 검증
+  test:
+    name: Pre-release Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install and test client
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run test
+
+      - name: Install and test server
+        run: |
+          cd server && npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npx tsc --noEmit
+          npm run test
+        env:
+          DATABASE_URL: "file:./test.db"
+          JWT_SECRET: "release-test-secret"
+
+  # Windows 빌드 + GitHub Release 배포
   release:
+    name: Build & Publish
     runs-on: windows-latest
+    needs: [test]
 
     steps:
       - name: Checkout repository
@@ -31,8 +66,8 @@ jobs:
       - name: Generate Prisma client
         run: cd server && npx prisma generate
 
-      - name: Build and package Electron app
-        run: npm run build
+      - name: Build Electron app (Windows)
+        run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -40,9 +75,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist-electron/*.exe
-            dist-electron/*.msi
+            release/*.exe
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
