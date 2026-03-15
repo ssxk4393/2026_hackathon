@@ -16,6 +16,19 @@ async function getMemberRole(sessionId: string, userId: string): Promise<string>
   return member?.role || 'standby';
 }
 
+function broadcastMembersList(io: Server, sessionId: string): void {
+  const room = getSessionRoom(sessionId);
+  const members = sessionMembers.get(sessionId);
+  if (!members) return;
+
+  const memberList = Array.from(members.values()).map(({ userId, name, role }) => ({
+    userId,
+    name,
+    role,
+  }));
+  io.to(room).emit('members:list', memberList);
+}
+
 export function registerHandlers(io: Server, socket: Socket): void {
   const user = socket.data.user as AuthPayload;
 
@@ -55,13 +68,8 @@ export function registerHandlers(io: Server, socket: Socket): void {
       role,
     });
 
-    // 입장한 유저에게 현재 접속자 목록 전송
-    const memberList = Array.from(members.values()).map(({ userId, name, role }) => ({
-      userId,
-      name,
-      role,
-    }));
-    socket.emit('members:list', memberList);
+    // 전체 멤버 목록 브로드캐스트
+    broadcastMembersList(io, sessionId);
 
     console.log(`[Socket] ${user.name} joined session ${sessionId} as ${role}`);
   });
@@ -97,19 +105,64 @@ export function registerHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  // 송출 담당자 전환
+  // 송출 담당자 전환 (직접 지정)
   socket.on('operator:switch', (data: { sessionId: string; operatorUserId: string }) => {
     const { sessionId, operatorUserId } = data;
     const room = getSessionRoom(sessionId);
 
-    // 온라인 멤버에서 이름 찾기
     const members = sessionMembers.get(sessionId);
     const targetMember = members?.get(operatorUserId);
 
     socket.to(room).emit('operator:switched', {
-      operatorUserId,
-      userName: targetMember?.name || operatorUserId,
+      newOperatorUserId: operatorUserId,
+      newOperatorName: targetMember?.name || operatorUserId,
+      oldOperatorUserId: user.userId,
+      oldOperatorName: user.name,
     });
+  });
+
+  // 교대 요청 (standby → operator)
+  socket.on('operator:request', async (data: { sessionId: string }) => {
+    const { sessionId } = data;
+    const room = getSessionRoom(sessionId);
+    const members = sessionMembers.get(sessionId);
+    if (!members) return;
+
+    const requester = members.get(user.userId);
+    if (!requester || requester.role !== 'standby') return;
+
+    // 현재 operator 찾기 (첫 번째)
+    const currentOperator = Array.from(members.values()).find((m) => m.role === 'operator');
+    if (!currentOperator) return;
+
+    // DB에서 role 교체 (트랜잭션)
+    await prisma.$transaction([
+      prisma.sessionMember.updateMany({
+        where: { sessionId, userId: currentOperator.userId, role: 'operator' },
+        data: { role: 'standby' },
+      }),
+      prisma.sessionMember.updateMany({
+        where: { sessionId, userId: user.userId, role: 'standby' },
+        data: { role: 'operator' },
+      }),
+    ]);
+
+    // 메모리 업데이트
+    currentOperator.role = 'standby';
+    requester.role = 'operator';
+
+    // 전체에 교대 알림
+    io.to(room).emit('operator:switched', {
+      newOperatorUserId: user.userId,
+      newOperatorName: user.name,
+      oldOperatorUserId: currentOperator.userId,
+      oldOperatorName: currentOperator.name,
+    });
+
+    // 멤버 목록 재전송
+    broadcastMembersList(io, sessionId);
+
+    console.log(`[Socket] Operator switched: ${currentOperator.name} -> ${user.name} in session ${sessionId}`);
   });
 
   // 연결 해제
@@ -124,20 +177,43 @@ export function registerHandlers(io: Server, socket: Socket): void {
   });
 }
 
-function leaveSession(io: Server, socket: Socket, sessionId: string, user: AuthPayload): void {
+async function leaveSession(io: Server, socket: Socket, sessionId: string, user: AuthPayload): Promise<void> {
   const room = getSessionRoom(sessionId);
   socket.leave(room);
 
   const members = sessionMembers.get(sessionId);
-  if (members) {
-    members.delete(user.userId);
-    if (members.size === 0) {
-      sessionMembers.delete(sessionId);
+  if (!members) return;
+
+  const leavingMember = members.get(user.userId);
+  members.delete(user.userId);
+
+  if (members.size === 0) {
+    sessionMembers.delete(sessionId);
+  } else if (leavingMember?.role === 'operator') {
+    // operator가 나갔으면 첫 번째 standby를 operator로 승격
+    const nextStandby = Array.from(members.values()).find((m) => m.role === 'standby');
+    if (nextStandby) {
+      await prisma.sessionMember.updateMany({
+        where: { sessionId, userId: nextStandby.userId },
+        data: { role: 'operator' },
+      }).catch(() => {});
+
+      nextStandby.role = 'operator';
+
+      io.to(room).emit('operator:switched', {
+        newOperatorUserId: nextStandby.userId,
+        newOperatorName: nextStandby.name,
+        oldOperatorUserId: user.userId,
+        oldOperatorName: user.name,
+      });
+
+      console.log(`[Socket] Auto-promoted ${nextStandby.name} to operator (${user.name} left)`);
     }
   }
 
-  // 남은 멤버들에게 퇴장 알림
+  // 남은 멤버들에게 퇴장 알림 + 목록 갱신
   io.to(room).emit('member:left', { userId: user.userId });
+  broadcastMembersList(io, sessionId);
 
   console.log(`[Socket] ${user.name} left session ${sessionId}`);
 }

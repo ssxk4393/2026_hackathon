@@ -12,6 +12,7 @@ interface SocketState {
   addOnlineMember: (member: OnlineMember) => void;
   removeOnlineMember: (userId: string) => void;
   setLastCaption: (caption: { text: string; userId: string; userName: string; timestamp: number }) => void;
+  updateMemberRole: (userId: string, role: 'operator' | 'standby') => void;
   reset: () => void;
 }
 
@@ -38,6 +39,13 @@ export const useSocketStore = create<SocketState>((set) => ({
     })),
 
   setLastCaption: (caption) => set({ lastCaption: caption }),
+
+  updateMemberRole: (userId, role) =>
+    set((state) => ({
+      onlineMembers: state.onlineMembers.map((m) =>
+        m.userId === userId ? { ...m, role } : m
+      ),
+    })),
 
   reset: () =>
     set({

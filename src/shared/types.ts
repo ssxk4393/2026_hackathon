@@ -179,12 +179,20 @@ export interface ClientToServerEvents {
   'session:leave': (data: { sessionId: string }) => void;
   'caption:send': (data: { sessionId: string; text: string }) => void;
   'operator:switch': (data: { sessionId: string; operatorUserId: string }) => void;
+  'operator:request': (data: { sessionId: string }) => void;
+}
+
+export interface OperatorSwitchedData {
+  newOperatorUserId: string;
+  newOperatorName: string;
+  oldOperatorUserId: string;
+  oldOperatorName: string;
 }
 
 export interface ServerToClientEvents {
   'caption:broadcast': (data: { text: string; userId: string; userName: string; timestamp: number }) => void;
-  'operator:switched': (data: { operatorUserId: string; userName: string }) => void;
-  'member:joined': (data: { userId: string; name: string; role: string }) => void;
+  'operator:switched': (data: OperatorSwitchedData) => void;
+  'member:joined': (data: { userId: string; name: string; role: 'operator' | 'standby' }) => void;
   'member:left': (data: { userId: string }) => void;
   'members:list': (data: OnlineMember[]) => void;
   'session:ended': (data: { sessionId: string }) => void;
@@ -193,7 +201,7 @@ export interface ServerToClientEvents {
 export interface OnlineMember {
   userId: string;
   name: string;
-  role: string;
+  role: 'operator' | 'standby';
 }
 
 // IPC 채널 상수
