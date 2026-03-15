@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Stenographer, CaptionStyle, SessionInfo } from '../../shared/types';
 import { DEFAULT_CAPTION_STYLE, DEFAULT_STENOGRAPHERS } from '../../shared/types';
+import { sendCaption as socketSendCaption } from '../services/socketService';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -49,9 +50,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     // 현재 송출 담당자인 경우에만 자막 전송
     if (get().activeOperatorId === stenographerId) {
+      // 로컬 CaptionWindow에 즉시 표시
       window.electronAPI.updateCaption(text);
-      // 세션이 있으면 서버에 자막 로그 저장
-      get().saveCaptionLog(text);
+
+      // 세션이 있으면 WebSocket으로 브로드캐스트 (서버가 DB 저장도 처리)
+      const session = get().currentSession;
+      if (session) {
+        socketSendCaption(session.id, text);
+      } else {
+        // 세션 없으면 HTTP 폴백으로 로그 저장
+        get().saveCaptionLog(text);
+      }
     }
   },
 

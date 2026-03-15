@@ -173,6 +173,29 @@ export interface CaptionLogEntry {
   createdAt: string;
 }
 
+// WebSocket 이벤트 타입
+export interface ClientToServerEvents {
+  'session:join': (data: { sessionId: string }) => void;
+  'session:leave': (data: { sessionId: string }) => void;
+  'caption:send': (data: { sessionId: string; text: string }) => void;
+  'operator:switch': (data: { sessionId: string; operatorUserId: string }) => void;
+}
+
+export interface ServerToClientEvents {
+  'caption:broadcast': (data: { text: string; userId: string; userName: string; timestamp: number }) => void;
+  'operator:switched': (data: { operatorUserId: string; userName: string }) => void;
+  'member:joined': (data: { userId: string; name: string; role: string }) => void;
+  'member:left': (data: { userId: string }) => void;
+  'members:list': (data: OnlineMember[]) => void;
+  'session:ended': (data: { sessionId: string }) => void;
+}
+
+export interface OnlineMember {
+  userId: string;
+  name: string;
+  role: string;
+}
+
 // IPC 채널 상수
 export const IPC_CHANNELS = {
   CAPTION_UPDATE: 'caption:update',

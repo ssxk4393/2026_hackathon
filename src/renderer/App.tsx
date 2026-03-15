@@ -1,11 +1,18 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from './stores/appStore';
+import { useSocketStore } from './stores/socketStore';
 import { StenographerPanel } from './components/StenographerPanel';
 import { ControlBar } from './components/ControlBar';
 import { StyleSettingsPanel } from './components/StyleSettingsPanel';
 import { StatusBar } from './components/StatusBar';
 import { LoginPage } from './components/LoginPage';
 import { SessionLobby } from './components/SessionLobby';
+import {
+  connectSocket,
+  joinSession,
+  leaveSession as socketLeaveSession,
+  disconnectSocket,
+} from './services/socketService';
 import type { SessionInfo } from '../shared/types';
 
 const API_BASE = 'http://localhost:3000';
@@ -74,9 +81,55 @@ export function App() {
     localStorage.removeItem('auth_user');
   };
 
+  // Socket 상태
+  const setConnectionStatus = useSocketStore((s) => s.setConnectionStatus);
+  const setOnlineMembers = useSocketStore((s) => s.setOnlineMembers);
+  const addOnlineMember = useSocketStore((s) => s.addOnlineMember);
+  const removeOnlineMember = useSocketStore((s) => s.removeOnlineMember);
+  const setLastCaption = useSocketStore((s) => s.setLastCaption);
+  const resetSocket = useSocketStore((s) => s.reset);
+
   const handleJoinSession = (session: SessionInfo) => {
     setCurrentSession(session);
   };
+
+  // 세션 입장 시 Socket 연결
+  useEffect(() => {
+    if (!currentSession || !user) return;
+
+    const socket = connectSocket(user.token, {
+      onStatusChange: setConnectionStatus,
+      onCaptionBroadcast: (data) => {
+        setLastCaption(data);
+        // 원격 자막을 로컬 CaptionWindow에도 표시
+        window.electronAPI.updateCaption(data.text);
+      },
+      onOperatorSwitched: (_data) => {
+        // TODO: 원격 송출 전환 반영
+      },
+      onMemberJoined: (data) => {
+        addOnlineMember(data);
+      },
+      onMemberLeft: (data) => {
+        removeOnlineMember(data.userId);
+      },
+      onMembersList: (data) => {
+        setOnlineMembers(data);
+      },
+      onSessionEnded: () => {
+        setCurrentSession(null);
+      },
+    });
+
+    // room 입장
+    joinSession(currentSession.id);
+
+    return () => {
+      socketLeaveSession(currentSession.id);
+      disconnectSocket();
+      resetSocket();
+    };
+  }, [currentSession?.id, user?.token]);
 
   const handleLeaveSession = async () => {
     if (!currentSession || !user) {
@@ -84,6 +137,7 @@ export function App() {
       return;
     }
 
+    // Socket 퇴장은 useEffect cleanup에서 처리됨
     try {
       await fetch(`${API_BASE}/sessions/${currentSession.id}/leave`, {
         method: 'POST',
