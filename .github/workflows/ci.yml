@@ -7,8 +7,74 @@ on:
     branches: [master]
 
 jobs:
-  ci:
+  # 타입 체크 + 클라이언트 테스트
+  client:
+    name: Client (TypeScript + Tests)
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: Run client tests
+        run: npm run test
+
+      - name: Build check (Vite)
+        run: npx vite build
+
+  # 서버 타입 체크 + 단위/통합 테스트
+  server:
+    name: Server (TypeScript + Tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: cd server && npm ci
+
+      - name: Generate Prisma client
+        run: cd server && npx prisma generate
+
+      - name: Run DB migrations (test)
+        run: cd server && npx prisma migrate deploy
+        env:
+          DATABASE_URL: "file:./test.db"
+
+      - name: TypeScript type check
+        run: cd server && npx tsc --noEmit
+
+      - name: Run server tests (unit + integration)
+        run: cd server && npm run test
+        env:
+          DATABASE_URL: "file:./test.db"
+          JWT_SECRET: "ci-test-secret"
+
+  # Electron 빌드 검증 (Windows)
+  build:
+    name: Electron Build (Windows)
+    runs-on: windows-latest
+    needs: [client, server]
 
     steps:
       - name: Checkout repository
@@ -26,17 +92,22 @@ jobs:
       - name: Install server dependencies
         run: cd server && npm ci
 
-      - name: TypeScript type check (root)
-        run: npx tsc --noEmit
-
-      - name: TypeScript type check (server)
-        run: cd server && npx tsc --noEmit
-
       - name: Generate Prisma client
         run: cd server && npx prisma generate
 
-      - name: Run tests
-        run: npx vitest run --passWithNoTests
+      - name: Build Electron app (Windows NSIS)
+        run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build check (Vite)
-        run: npx vite build
+      - name: Verify installer exists
+        run: |
+          if (Test-Path "release/*.exe") { Write-Host "Installer found" } else { exit 1 }
+        shell: pwsh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: release/*.exe
+          retention-days: 7
