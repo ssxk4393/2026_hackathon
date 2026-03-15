@@ -154,6 +154,38 @@ npm test && cd server && npm test
 | Server | 33 | API 라우트, 미들웨어, WebSocket, 세션 관리 |
 | **합계** | **51** | |
 
+## CI/CD
+
+GitHub Actions를 통해 자동화된 빌드/테스트/배포 파이프라인이 구축되어 있습니다.
+
+### CI 파이프라인 (`ci.yml`)
+
+PR 생성 및 master push 시 자동 실행됩니다.
+
+| Job | 환경 | 실행 내용 |
+|-----|------|-----------|
+| **Client** | ubuntu-latest | TypeScript 타입 체크 → 18개 테스트 → Vite 빌드 |
+| **Server** | ubuntu-latest | Prisma 생성 → DB 마이그레이션 → TypeScript 체크 → 33개 테스트 |
+| **Build** | windows-latest | Electron 빌드 → NSIS 인스톨러 생성 → 아티팩트 업로드 (7일 보관) |
+
+### Release 파이프라인 (`release.yml`)
+
+`v*` 태그 push 시 자동 실행됩니다.
+
+1. **Pre-release Tests**: 클라이언트 + 서버 전체 테스트 검증
+2. **Build & Publish**: Windows Electron 빌드 → GitHub Releases 자동 배포
+
+### 워크플로우 구성
+
+```yaml
+# ci.yml 핵심 구조
+jobs:
+  client:    # TypeScript + 18 tests + Vite build
+  server:    # Prisma + TypeScript + 33 tests
+  build:     # Electron NSIS installer (depends on client, server)
+    needs: [client, server]
+```
+
 ## 바이브 코딩 방법론
 
 이 프로젝트는 **바이브 코딩 (Vibe Coding)** 방식으로 개발되었습니다. 바이브 코딩은 AI를 단순한 코드 생성 도구가 아닌, 프로젝트의 전 과정에 참여하는 협업 파트너로 활용하는 AI 네이티브 개발 방법론입니다.
