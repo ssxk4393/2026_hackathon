@@ -12,7 +12,8 @@ export function StenographerPanel({ stenographer }: StenographerPanelProps) {
   const activeOperatorId = useAppStore((s) => s.activeOperatorId);
   const updateCaptionText = useAppStore((s) => s.updateCaptionText);
 
-  const isOperator = activeOperatorId === stenographer.id;
+  // 세션 모드에서는 isActive prop 사용, 로컬 모드에서는 activeOperatorId 비교
+  const isOperator = stenographer.isActive || activeOperatorId === stenographer.id;
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

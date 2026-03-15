@@ -105,20 +105,46 @@ export function registerHandlers(io: Server, socket: Socket): void {
     });
   });
 
-  // 송출 담당자 전환 (직접 지정)
-  socket.on('operator:switch', (data: { sessionId: string; operatorUserId: string }) => {
+  // 송출 담당자 전환 (operator가 특정 standby에게 넘기기)
+  socket.on('operator:switch', async (data: { sessionId: string; operatorUserId: string }) => {
     const { sessionId, operatorUserId } = data;
     const room = getSessionRoom(sessionId);
-
     const members = sessionMembers.get(sessionId);
-    const targetMember = members?.get(operatorUserId);
+    if (!members) return;
 
-    socket.to(room).emit('operator:switched', {
+    const currentOp = members.get(user.userId);
+    if (!currentOp || currentOp.role !== 'operator') return;
+
+    const target = members.get(operatorUserId);
+    if (!target || target.role !== 'standby') return;
+
+    // DB에서 role 교체 (트랜잭션)
+    await prisma.$transaction([
+      prisma.sessionMember.updateMany({
+        where: { sessionId, userId: user.userId, role: 'operator' },
+        data: { role: 'standby' },
+      }),
+      prisma.sessionMember.updateMany({
+        where: { sessionId, userId: operatorUserId, role: 'standby' },
+        data: { role: 'operator' },
+      }),
+    ]);
+
+    // 메모리 업데이트
+    currentOp.role = 'standby';
+    target.role = 'operator';
+
+    // 전체에 교대 알림
+    io.to(room).emit('operator:switched', {
       newOperatorUserId: operatorUserId,
-      newOperatorName: targetMember?.name || operatorUserId,
+      newOperatorName: target.name,
       oldOperatorUserId: user.userId,
       oldOperatorName: user.name,
     });
+
+    broadcastMembersList(io, sessionId);
+
+    console.log(`[Socket] Operator handoff: ${user.name} -> ${target.name} in session ${sessionId}`);
   });
 
   // 교대 요청 (standby → operator)

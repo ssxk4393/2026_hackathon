@@ -3,6 +3,7 @@ import { useAppStore } from './stores/appStore';
 import { useSocketStore } from './stores/socketStore';
 import { StenographerPanel } from './components/StenographerPanel';
 import { StandbyPanel } from './components/StandbyPanel';
+import { RemoteOperatorPanel } from './components/RemoteOperatorPanel';
 import { ControlBar } from './components/ControlBar';
 import { StyleSettingsPanel } from './components/StyleSettingsPanel';
 import { StatusBar } from './components/StatusBar';
@@ -385,17 +386,28 @@ export function App() {
         <div className="flex min-h-0 flex-1 flex-col">
           {/* 세션 모드: role 기반 패널 / 로컬 모드: 기존 패널 */}
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-5">
-            {isSessionMode && myRole === 'standby' ? (
-              <StandbyPanel />
-            ) : isSessionMode && myRole === 'operator' ? (
-              // 세션 모드 operator: 단일 입력 패널
-              <StenographerPanel
-                stenographer={{
-                  id: currentUserId,
-                  name: user.name,
-                  isActive: true,
-                }}
-              />
+            {isSessionMode ? (
+              <>
+                {/* 내 패널: 항상 표시 (operator면 입력 가능, standby면 연습용) */}
+                <StenographerPanel
+                  key={currentUserId}
+                  stenographer={{
+                    id: currentUserId,
+                    name: user.name,
+                    isActive: myRole === 'operator',
+                  }}
+                />
+                {/* 다른 operator 패널: 읽기 전용 */}
+                {onlineMembers
+                  .filter((m) => m.role === 'operator' && m.userId !== currentUserId)
+                  .map((m) => (
+                    <RemoteOperatorPanel
+                      key={m.userId}
+                      userId={m.userId}
+                      name={m.name}
+                    />
+                  ))}
+              </>
             ) : (
               // 로컬 모드: 기존 패널
               stenographers.map((s) => (
