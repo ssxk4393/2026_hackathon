@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SessionInfo } from '../../shared/types';
-
-const API_BASE = 'http://localhost:3000';
+import { apiRequest } from '../services/apiClient';
 
 interface SessionLobbyProps {
   token: string;
@@ -28,16 +27,9 @@ export function SessionLobby({
   const [maxOperators, setMaxOperators] = useState(2);
   const [isCreating, setIsCreating] = useState(false);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
-
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/sessions`, { headers });
-      if (!res.ok) throw new Error('세션 목록 조회 실패');
-      const data = await res.json();
+      const data = await apiRequest<SessionInfo[]>('/sessions', { token });
       setSessions(data);
     } catch {
       setError('세션 목록을 불러올 수 없습니다');
@@ -58,15 +50,12 @@ export function SessionLobby({
     setError('');
 
     try {
-      const res = await fetch(`${API_BASE}/sessions`, {
+      const session = await apiRequest<SessionInfo>('/sessions', {
         method: 'POST',
-        headers,
+        token,
         body: JSON.stringify({ name: trimmed, maxOperators }),
       });
 
-      if (!res.ok) throw new Error('세션 생성 실패');
-
-      const session: SessionInfo = await res.json();
       onJoinSession(session);
     } catch {
       setError('세션 생성에 실패했습니다');
@@ -80,19 +69,13 @@ export function SessionLobby({
 
     try {
       // 참가 요청
-      const joinRes = await fetch(`${API_BASE}/sessions/${sessionId}/join`, {
+      await apiRequest(`/sessions/${sessionId}/join`, {
         method: 'POST',
-        headers,
+        token,
       });
-      if (!joinRes.ok) throw new Error('세션 참가 실패');
 
       // 세션 상세 조회
-      const detailRes = await fetch(`${API_BASE}/sessions/${sessionId}`, {
-        headers,
-      });
-      if (!detailRes.ok) throw new Error('세션 조회 실패');
-
-      const session: SessionInfo = await detailRes.json();
+      const session = await apiRequest<SessionInfo>(`/sessions/${sessionId}`, { token });
       onJoinSession(session);
     } catch {
       setError('세션 참가에 실패했습니다');

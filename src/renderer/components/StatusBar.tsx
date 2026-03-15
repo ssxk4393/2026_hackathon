@@ -7,7 +7,16 @@ export function StatusBar() {
   const stenographers = useAppStore((s) => s.stenographers);
   const connectionStatus = useSocketStore((s) => s.connectionStatus);
   const onlineMembers = useSocketStore((s) => s.onlineMembers);
+  const lastCaption = useSocketStore((s) => s.lastCaption);
   const [elapsed, setElapsed] = useState(0);
+  const [latency, setLatency] = useState<number | null>(null);
+
+  // 자막 지연 시간 계산
+  useEffect(() => {
+    if (lastCaption?.timestamp) {
+      setLatency(Date.now() - lastCaption.timestamp);
+    }
+  }, [lastCaption]);
 
   // 세션 타이머
   useEffect(() => {
@@ -54,6 +63,18 @@ export function StatusBar() {
         <span className={`h-1.5 w-1.5 rounded-full ${status.color}`} />
         <span className="text-[11px] text-text-muted">{status.label}</span>
       </div>
+
+      <span className="text-[11px] text-border-subtle">|</span>
+
+      {/* 자막 지연 시간 (세션 모드) */}
+      {latency !== null && onlineMembers.length > 0 && (
+        <>
+          <span className="text-[11px] text-border-subtle">|</span>
+          <span className={`text-[11px] ${latency > 200 ? 'text-yellow-400' : 'text-text-muted'}`}>
+            지연: {latency}ms
+          </span>
+        </>
+      )}
 
       <span className="text-[11px] text-border-subtle">|</span>
 

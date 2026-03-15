@@ -6,6 +6,7 @@ const SERVER_URL = 'http://localhost:3000';
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 let socket: TypedSocket | null = null;
+let currentSessionId: string | null = null;
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
@@ -48,6 +49,15 @@ export function connectSocket(token: string, callbacks: SocketCallbacks): TypedS
 
   socket.io.on('reconnect', () => {
     callbacks.onStatusChange('connected');
+    // 재연결 시 이전 세션에 다시 입장
+    if (currentSessionId) {
+      socket?.emit('session:join', { sessionId: currentSessionId });
+    }
+  });
+
+  // 서버 에러 리스너
+  socket.on('error', (data: { message: string }) => {
+    console.error('[Socket] Server error:', data.message);
   });
 
   // 이벤트 리스너 등록
@@ -62,10 +72,12 @@ export function connectSocket(token: string, callbacks: SocketCallbacks): TypedS
 }
 
 export function joinSession(sessionId: string): void {
+  currentSessionId = sessionId;
   socket?.emit('session:join', { sessionId });
 }
 
 export function leaveSession(sessionId: string): void {
+  currentSessionId = null;
   socket?.emit('session:leave', { sessionId });
 }
 
@@ -82,6 +94,7 @@ export function requestOperator(sessionId: string): void {
 }
 
 export function disconnectSocket(): void {
+  currentSessionId = null;
   if (socket) {
     socket.removeAllListeners();
     socket.disconnect();

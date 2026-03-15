@@ -30,6 +30,12 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Global error handler (after all routes)
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Server] Unhandled error:', err.message);
+  res.status(500).json({ error: '서버 내부 오류가 발생했습니다' });
+});
+
 // Socket.io 초기화
 initSocketServer(server);
 
